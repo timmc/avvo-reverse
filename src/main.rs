@@ -116,7 +116,7 @@ fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
     //println!("No match for {}", printable_parts(&parts));
 }
 
-/// At least three orders of magnitude slower
+/// At least three orders of magnitude slower (hours, rather than seconds)
 const ALLOW_OUTER_DELIMS: bool = false;
 
 fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
