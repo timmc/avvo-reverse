@@ -101,27 +101,12 @@ fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
     return ret;
 }
 
-fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
-    let hashed = hash(&parts);
-
-    if hashed == input.bytes1 {
-        println!("FOUND! Matched first hash with SHA-1: {}", printable_parts(&parts));
-        process::exit(0);
-    }
-
-    if hashed == input.bytes2 {
-        println!("FOUND! Matched second hash with SHA-1: {}", printable_parts(&parts));
-        process::exit(0);
-    }
-
-    //println!("No match for {}", printable_parts(&parts));
-}
-
 /// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
 const ALLOW_OUTER_DELIMS: bool = false;
 
-fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
+fn check_permutations(parts: &Vec<&Vec<u8>>, target: &Vec<u8>) -> u32 {
     let delimiters = delims();
+    let mut ct = 0;
     for perm_refs in parts.iter().permutations(parts.len()) {
         let perm = perm_refs.into_iter().map(|xs| *xs).collect();
         println!("      Permutation: {}", printable_parts(&perm));
@@ -135,9 +120,17 @@ fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
             };
             let guess: Vec<&Vec<u8>> = stream1.iter().interleave(stream2.iter())
                 .map(|bs| *bs).collect();
-            check_guess(&input, &guess)
+
+            if &hash(&guess) == target {
+                println!("FOUND! Matched hash {} with SHA-1 of {}",
+                         printable_bytes(&target), printable_parts(&guess));
+                process::exit(0);
+            }
+
+            ct += 1;
         }
     }
+    ct
 }
 
 fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>) {
@@ -148,20 +141,27 @@ fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>)
         vec![&password_variant, &input.seqid],
         vec![&password_variant, &input.email, &input.seqid],
     ];
-    let salts = vec![&input.hex1, &input.hex2, &input.bytes1, &input.bytes2];
+    let salts_and_targets = vec![
+        (&input.hex1, &input.bytes2),
+        (&input.hex2, &input.bytes1),
+        (&input.bytes1, &input.bytes2),
+        (&input.bytes2, &input.bytes1),
+    ];
+    let mut ct = 0;
 
     for combo in combos {
         println!("  Combination: {}", printable_parts(&combo));
         println!("    Unsalted");
-        check_permutations(&input, &combo);
-        for salt in salts.iter() {
+        ct += check_permutations(&combo, &input.bytes1);
+        ct += check_permutations(&combo, &input.bytes2);
+        for (salt, target) in salts_and_targets.iter() {
             println!("    With salt: {}", printable_bytes(&salt));
-            let mut with_salt = combo.clone();
-            with_salt.push(&salt);
-            // FIXME: Half the time, this checks salts against themselves
-            check_permutations(&input, &with_salt);
+            let mut salted_combo = combo.clone();
+            salted_combo.push(&salt);
+            ct += check_permutations(&salted_combo, &target);
         }
     }
+    println!("Checked with transform: {}", ct);
 }
 
 fn check_hmac(input: &Input, key: &Vec<u8>, maybe_mac: &Vec<u8>) {
