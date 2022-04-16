@@ -184,7 +184,8 @@ fn main() {
     match &args[..] {
         [_, record_path, password_path] => run(record_path, password_path),
         _ => {
-            println!("Usage: cargo run <record_file> <password_file>");
+            println!("Usage: avvo-reverse <record_file> <password_file>");
+            println!("It is strongly recommended that you build with --release flag for performance.");
             process::exit(1);
         }
     }
