@@ -60,7 +60,7 @@ fn delims() -> Vec<Vec<u8>> {
     return delimiters;
 }
 
-fn hash(data: &Vec<Vec<u8>>) -> Vec<u8> {
+fn hash(data: &Vec<&Vec<u8>>) -> Vec<u8> {
     let mut hasher = Sha1::new();
     for piece in data {
         hasher.update(piece);
@@ -78,7 +78,7 @@ fn printable_bytes(bs: &Vec<u8>) -> String {
     return String::from_utf8(ret).unwrap();
 }
 
-fn printable_parts(parts: &Vec<Vec<u8>>) -> String {
+fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
     let mut ret = String::new();
     for part in parts {
         ret += &printable_bytes(&part);
@@ -86,7 +86,7 @@ fn printable_parts(parts: &Vec<Vec<u8>>) -> String {
     return ret;
 }
 
-fn check_guess(input: &Input, parts: &Vec<Vec<u8>>) {
+fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
     let hashed = hash(&parts);
 
     if hashed == input.bytes1 {
@@ -102,25 +102,26 @@ fn check_guess(input: &Input, parts: &Vec<Vec<u8>>) {
     println!("No match for {}", printable_parts(&parts));
 }
 
-fn check_permutations(input: &Input, parts: &Vec<Vec<u8>>) {
+fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
     let delimiters = delims();
     for perm_refs in parts.iter().permutations(parts.len()) {
-        let perm = perm_refs.into_iter().map(|xs| xs.to_vec()).collect();
+        let perm = perm_refs.into_iter().map(|xs| *xs).collect();
         println!("permutation: {}", printable_parts(&perm));
 
         // Allows leading and trailing delimiter
-        for delim_refs in iter::repeat(&delimiters).take(perm.len() + 1).multi_cartesian_product() {
-            let delim_choice: Vec<Vec<u8>> = delim_refs.into_iter().map(|xs| xs.to_vec()).collect();
-            println!("  with delimiters: {}", printable_parts(&delim_choice));
-            // let guess: Vec<Vec<u8>> = delim_choice.interleave(perm).collect();
+        for delims_choice in iter::repeat(&delimiters).take(perm.len() + 1).multi_cartesian_product() {
+            //println!("  with delimiters: {}", printable_parts(&delims_choice));
+            // let guess: Vec<&Vec<u8>> = delims_choice.interleave(perm).collect();
             // check_guess(&input, &guess)
         }
     }
 }
 
 fn crack(input: Input) {
-    let parts: Vec<Vec<u8>> = vec![input.password.clone(), "goodbye".to_string().as_bytes().to_owned()];
-    check_permutations(&input, &parts);
+    check_permutations(&input, &vec![&input.password]);
+    check_permutations(&input, &vec![&input.password, &input.email]);
+    check_permutations(&input, &vec![&input.password, &input.seqid]);
+    check_permutations(&input, &vec![&input.password, &input.email, &input.seqid]);
 }
 
 fn run(record_path: &String, password_path: &String) {
