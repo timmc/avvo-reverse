@@ -65,7 +65,7 @@ fn hash(data: &Vec<&Vec<u8>>) -> Vec<u8> {
     for piece in data {
         hasher.update(piece);
     }
-    return hasher.finalize().as_slice().to_owned();
+    return hasher.finalize().to_vec();
 }
 
 fn printable_bytes(bs: &Vec<u8>) -> String {
@@ -99,29 +99,57 @@ fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
         process::exit(0);
     }
 
-    println!("No match for {}", printable_parts(&parts));
+    //println!("No match for {}", printable_parts(&parts));
 }
 
 fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
     let delimiters = delims();
     for perm_refs in parts.iter().permutations(parts.len()) {
         let perm = perm_refs.into_iter().map(|xs| *xs).collect();
-        println!("permutation: {}", printable_parts(&perm));
+        println!("      Permutation: {}", printable_parts(&perm));
 
         // Allows leading and trailing delimiter
         for delims_choice in iter::repeat(&delimiters).take(perm.len() + 1).multi_cartesian_product() {
-            //println!("  with delimiters: {}", printable_parts(&delims_choice));
-            // let guess: Vec<&Vec<u8>> = delims_choice.interleave(perm).collect();
-            // check_guess(&input, &guess)
+            let guess: Vec<&Vec<u8>> = delims_choice.iter().interleave(perm.iter())
+                .map(|bs| *bs).collect();
+            check_guess(&input, &guess)
+        }
+    }
+}
+
+fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>) {
+    let password_variant = xform(&input.password);
+    let combos: Vec<Vec<&Vec<u8>>> = vec![
+        vec![&password_variant],
+        vec![&password_variant, &input.email],
+        vec![&password_variant, &input.seqid],
+        vec![&password_variant, &input.email, &input.seqid],
+    ];
+    let salts = vec![&input.hex1, &input.hex2, &input.bytes1, &input.bytes2];
+
+    for combo in combos {
+        println!("  Combination: {}", printable_parts(&combo));
+        println!("    Unsalted");
+        check_permutations(&input, &combo);
+        for salt in salts.iter() {
+            println!("    With salt: {}", printable_bytes(&salt));
+            let mut with_salt = combo.clone();
+            with_salt.push(&salt);
+            check_permutations(&input, &with_salt);
         }
     }
 }
 
 fn crack(input: Input) {
-    check_permutations(&input, &vec![&input.password]);
-    check_permutations(&input, &vec![&input.password, &input.email]);
-    check_permutations(&input, &vec![&input.password, &input.seqid]);
-    check_permutations(&input, &vec![&input.password, &input.email, &input.seqid]);
+    println!("Variant: plain");
+    check_with_password_xform(&input, &|p| p.clone());
+
+    println!("Variant: SHA1");
+    check_with_password_xform(&input, &|p| {
+        let mut hasher = Sha1::new();
+        hasher.update(&p);
+        hasher.finalize().to_vec()
+    });
 }
 
 fn run(record_path: &String, password_path: &String) {
