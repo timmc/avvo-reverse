@@ -1,3 +1,17 @@
+/// Attempt to reverse-engineer Avvo.com's hash algorithm, given a leaked
+/// record and a known password.
+///
+/// Sample for validation of hash checker:
+///
+/// $ cat ~/tmp/ram/sample-record.txt
+/// some@email,1199546,3e6139dd5bba6c8617c112abdb026a648e9bf592,45aa026ed8621c824dfa0acbb478d3eef87020bd,NULL
+///
+/// $ cat ~/tmp/ram/sample-password.txt
+/// hello
+///
+/// $ avvo-reverse ~/tmp/ram/sample-record.txt ~/tmp/ram/sample-password.txt
+/// FOUND! Matched second hash: input=b'3e6139dd5bba6c8617c112abdb026a648e9bf592;some@email_1199546=hello'
+
 use hex;
 use itertools::Itertools;
 use sha1::{Sha1, Digest};
@@ -90,17 +104,20 @@ fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
     let hashed = hash(&parts);
 
     if hashed == input.bytes1 {
-        println!("{} matches first hash!", printable_parts(&parts));
+        println!("FOUND! Matched first hash: {}", printable_parts(&parts));
         process::exit(0);
     }
 
     if hashed == input.bytes2 {
-        println!("{} matches second hash!", printable_parts(&parts));
+        println!("FOUND! Matched second hash: {}", printable_parts(&parts));
         process::exit(0);
     }
 
     //println!("No match for {}", printable_parts(&parts));
 }
+
+/// At least three orders of magnitude slower
+const ALLOW_OUTER_DELIMS: bool = false;
 
 fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
     let delimiters = delims();
@@ -108,9 +125,14 @@ fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
         let perm = perm_refs.into_iter().map(|xs| *xs).collect();
         println!("      Permutation: {}", printable_parts(&perm));
 
-        // Allows leading and trailing delimiter
-        for delims_choice in iter::repeat(&delimiters).take(perm.len() + 1).multi_cartesian_product() {
-            let guess: Vec<&Vec<u8>> = delims_choice.iter().interleave(perm.iter())
+        let delim_count = if ALLOW_OUTER_DELIMS { perm.len() + 1 } else { perm.len() - 1 };
+        for delims_choice in iter::repeat(&delimiters).take(delim_count).multi_cartesian_product() {
+            let (stream1, stream2) = if ALLOW_OUTER_DELIMS {
+                (&delims_choice, &perm)
+            } else {
+                (&perm, &delims_choice)
+            };
+            let guess: Vec<&Vec<u8>> = stream1.iter().interleave(stream2.iter())
                 .map(|bs| *bs).collect();
             check_guess(&input, &guess)
         }
