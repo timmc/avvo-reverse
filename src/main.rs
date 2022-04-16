@@ -1,7 +1,10 @@
 use hex;
+use itertools::Itertools;
 use sha1::{Sha1, Digest};
+use std::ascii;
 use std::env;
 use std::fs;
+use std::iter;
 use std::process;
 
 struct Input {
@@ -10,6 +13,9 @@ struct Input {
     seqid: Vec<u8>,
     hex1: Vec<u8>,
     hex2: Vec<u8>,
+    // Precomputed from record
+    bytes1: Vec<u8>,
+    bytes2: Vec<u8>,
     // From password file
     password: Vec<u8>,
 }
@@ -19,11 +25,18 @@ fn load(record_path: &String, password_path: &String) -> Input {
     let password_raw = fs::read_to_string(password_path).expect("Couldn't read password file");
 
     let record_parts: Vec<&str> = record_raw.split(',').collect();
+    let hex1 = record_parts[2].as_bytes().to_owned();
+    let hex2 = record_parts[3].as_bytes().to_owned();
+    let bytes1 = hex::decode(&hex1).expect("First hex chunk unreadable");
+    let bytes2 = hex::decode(&hex2).expect("Second hex chunk unreadable");
+
     return Input {
         email: record_parts[0].as_bytes().to_owned(),
         seqid: record_parts[1].as_bytes().to_owned(),
-        hex1: record_parts[2].as_bytes().to_owned(),
-        hex2: record_parts[3].as_bytes().to_owned(),
+        hex1: hex1,
+        hex2: hex2,
+        bytes1: bytes1,
+        bytes2: bytes2,
         password: password_raw.split('\n').next().expect("Password split had zero items").as_bytes().to_owned(),
     };
 }
@@ -47,22 +60,67 @@ fn delims() -> Vec<Vec<u8>> {
     return delimiters;
 }
 
-fn hash(data: &Vec<u8>) -> Vec<u8> {
+fn hash(data: &Vec<Vec<u8>>) -> Vec<u8> {
     let mut hasher = Sha1::new();
-    hasher.update(data);
+    for piece in data {
+        hasher.update(piece);
+    }
     return hasher.finalize().as_slice().to_owned();
 }
 
-fn crack(input: Input) {
-    let bytes1 = hex::decode(input.hex1).expect("First hex chunk unreadable");
-    let bytes2 = hex::decode(input.hex2).expect("Second hex chunk unreadable");
+fn printable_bytes(bs: &Vec<u8>) -> String {
+    let mut ret = Vec::new();
+    for b in bs {
+        for c in ascii::escape_default(*b) {
+            ret.push(c);
+        }
+    }
+    return String::from_utf8(ret).unwrap();
+}
 
+fn printable_parts(parts: &Vec<Vec<u8>>) -> String {
+    let mut ret = String::new();
+    for part in parts {
+        ret += &printable_bytes(&part);
+    }
+    return ret;
+}
+
+fn check_guess(input: &Input, parts: &Vec<Vec<u8>>) {
+    let hashed = hash(&parts);
+
+    if hashed == input.bytes1 {
+        println!("{} matches first hash!", printable_parts(&parts));
+        process::exit(0);
+    }
+
+    if hashed == input.bytes2 {
+        println!("{} matches second hash!", printable_parts(&parts));
+        process::exit(0);
+    }
+
+    println!("No match for {}", printable_parts(&parts));
+}
+
+fn check_permutations(input: &Input, parts: &Vec<Vec<u8>>) {
     let delimiters = delims();
+    for perm_refs in parts.iter().permutations(parts.len()) {
+        let perm = perm_refs.into_iter().map(|xs| xs.to_vec()).collect();
+        println!("permutation: {}", printable_parts(&perm));
 
-    let pass_hash = hash(&input.password);
-    let eq_check = pass_hash == bytes2;
-    println!("{} matches? {}", hex::encode(pass_hash), eq_check);
+        // Allows leading and trailing delimiter
+        for delim_refs in iter::repeat(&delimiters).take(perm.len() + 1).multi_cartesian_product() {
+            let delim_choice: Vec<Vec<u8>> = delim_refs.into_iter().map(|xs| xs.to_vec()).collect();
+            println!("  with delimiters: {}", printable_parts(&delim_choice));
+            // let guess: Vec<Vec<u8>> = delim_choice.interleave(perm).collect();
+            // check_guess(&input, &guess)
+        }
+    }
+}
 
+fn crack(input: Input) {
+    let parts: Vec<Vec<u8>> = vec![input.password.clone(), "goodbye".to_string().as_bytes().to_owned()];
+    check_permutations(&input, &parts);
 }
 
 fn run(record_path: &String, password_path: &String) {
