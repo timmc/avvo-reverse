@@ -10,9 +10,10 @@
 /// hello
 ///
 /// $ avvo-reverse ~/tmp/ram/sample-record.txt ~/tmp/ram/sample-password.txt
-/// FOUND! Matched second hash: input=b'3e6139dd5bba6c8617c112abdb026a648e9bf592;some@email_1199546=hello'
+/// FOUND! Matched second hash with SHA-1: input=b'3e6139dd5bba6c8617c112abdb026a648e9bf592;some@email_1199546=hello'
 
 use hex;
+use hmac_sha1_compact::HMAC;
 use itertools::Itertools;
 use sha1::{Sha1, Digest};
 use std::ascii;
@@ -104,19 +105,19 @@ fn check_guess(input: &Input, parts: &Vec<&Vec<u8>>) {
     let hashed = hash(&parts);
 
     if hashed == input.bytes1 {
-        println!("FOUND! Matched first hash: {}", printable_parts(&parts));
+        println!("FOUND! Matched first hash with SHA-1: {}", printable_parts(&parts));
         process::exit(0);
     }
 
     if hashed == input.bytes2 {
-        println!("FOUND! Matched second hash: {}", printable_parts(&parts));
+        println!("FOUND! Matched second hash with SHA-1: {}", printable_parts(&parts));
         process::exit(0);
     }
 
     //println!("No match for {}", printable_parts(&parts));
 }
 
-/// At least three orders of magnitude slower (hours, rather than seconds)
+/// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
 const ALLOW_OUTER_DELIMS: bool = false;
 
 fn check_permutations(input: &Input, parts: &Vec<&Vec<u8>>) {
@@ -157,16 +158,32 @@ fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>)
             println!("    With salt: {}", printable_bytes(&salt));
             let mut with_salt = combo.clone();
             with_salt.push(&salt);
+            // FIXME: Half the time, this checks salts against themselves
             check_permutations(&input, &with_salt);
         }
     }
 }
 
+fn check_hmac(input: &Input, key: &Vec<u8>, maybe_mac: &Vec<u8>) {
+    let mac = HMAC::mac(&input.password, &key).to_vec();
+    if &mac == maybe_mac {
+        println!("FOUND! Matched hash {} with HMAC using key {}",
+                 printable_bytes(&maybe_mac), printable_bytes(&key));
+        process::exit(0);
+    }
+}
+
 fn crack(input: Input) {
-    println!("Variant: plain");
+    println!("HMAC-SHA1");
+    check_hmac(&input, &input.bytes1, &input.bytes2);
+    check_hmac(&input, &input.hex1, &input.bytes2);
+    check_hmac(&input, &input.bytes2, &input.bytes1);
+    check_hmac(&input, &input.hex2, &input.bytes1);
+
+    println!("SHA-1: Plain password");
     check_with_password_xform(&input, &|p| p.clone());
 
-    println!("Variant: SHA1");
+    println!("SHA-1: Prehash password with SHA-1");
     check_with_password_xform(&input, &|p| {
         let mut hasher = Sha1::new();
         hasher.update(&p);
