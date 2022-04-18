@@ -103,11 +103,11 @@ fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
 /// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
 const ALLOW_OUTER_DELIMS: bool = true;
 
-fn check_permutations(parts: &Vec<&Vec<u8>>, target: &Vec<u8>) -> u32 {
+fn check_permutations(parts: &[&Vec<u8>], target: &Vec<u8>) -> u32 {
     let delimiters = delims();
     let mut ct = 0;
     for perm_refs in parts.iter().permutations(parts.len()) {
-        let perm = perm_refs.into_iter().map(|xs| *xs).collect();
+        let perm = perm_refs.into_iter().copied().collect();
         println!("      Permutation: {}", printable_parts(&perm));
 
         let delim_count = if ALLOW_OUTER_DELIMS { perm.len() + 1 } else { perm.len() - 1 };
@@ -118,7 +118,7 @@ fn check_permutations(parts: &Vec<&Vec<u8>>, target: &Vec<u8>) -> u32 {
                 (&perm, &delims_choice)
             };
             let guess: Vec<&Vec<u8>> = stream1.iter().interleave(stream2.iter())
-                .map(|bs| *bs).collect();
+                .copied().collect();
 
             if &hash(&guess) == target {
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
