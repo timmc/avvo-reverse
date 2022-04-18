@@ -4,13 +4,13 @@
 /// Sample for validation of hash checker:
 ///
 /// $ cat ~/tmp/ram/sample-record.txt
-/// some@email,1199546,3e6139dd5bba6c8617c112abdb026a648e9bf592,45aa026ed8621c824dfa0acbb478d3eef87020bd,NULL
+/// some@email,1199546,3e6139dd5bba6c8617c112abdb026a648e9bf592,8e1d0e47d92636c1673580f8c2d25985721654f5,NULL
 ///
 /// $ cat ~/tmp/ram/sample-password.txt
 /// hello
 ///
 /// $ avvo-reverse ~/tmp/ram/sample-record.txt ~/tmp/ram/sample-password.txt
-/// FOUND! Matched second hash with SHA-1: input=b'3e6139dd5bba6c8617c112abdb026a648e9bf592;some@email_1199546=hello'
+/// FOUND! Matched second hash with SHA-1: input=b'|hello:some@email/1199546::3e6139dd5bba6c8617c112abdb026a648e9bf592|'
 
 use hex;
 use hmac_sha1_compact::HMAC;
