@@ -12,7 +12,6 @@
 /// $ avvo-reverse ~/tmp/ram/sample-record.txt ~/tmp/ram/sample-password.txt
 /// FOUND! Matched second hash with SHA-1: input=b'|hello:some@email/1199546::3e6139dd5bba6c8617c112abdb026a648e9bf592|'
 
-use hex;
 use hmac_sha1_compact::HMAC;
 use itertools::Itertools;
 use sha1::{Sha1, Digest};
@@ -45,15 +44,15 @@ fn load(record_path: &String, password_path: &String) -> Input {
     let bytes1 = hex::decode(&hex1).expect("First hex chunk unreadable");
     let bytes2 = hex::decode(&hex2).expect("Second hex chunk unreadable");
 
-    return Input {
+    Input {
         email: record_parts[0].as_bytes().to_owned(),
         seqid: record_parts[1].as_bytes().to_owned(),
-        hex1: hex1,
-        hex2: hex2,
-        bytes1: bytes1,
-        bytes2: bytes2,
+        hex1,
+        hex2,
+        bytes1,
+        bytes2,
         password: password_raw.split('\n').next().expect("Password split had zero items").as_bytes().to_owned(),
-    };
+    }
 }
 
 fn delims() -> Vec<Vec<u8>> {
@@ -68,11 +67,11 @@ fn delims() -> Vec<Vec<u8>> {
     }
 
     // Add in some likely other delims
-    for other in vec!["::", "||", "--"] {
+    for other in &["::", "||", "--"] {
         delimiters.push(other.as_bytes().to_owned());
     }
 
-    return delimiters;
+    delimiters
 }
 
 fn hash(data: &Vec<&Vec<u8>>) -> Vec<u8> {
@@ -80,7 +79,7 @@ fn hash(data: &Vec<&Vec<u8>>) -> Vec<u8> {
     for piece in data {
         hasher.update(piece);
     }
-    return hasher.finalize().to_vec();
+    hasher.finalize().to_vec()
 }
 
 fn printable_bytes(bs: &Vec<u8>) -> String {
@@ -90,15 +89,15 @@ fn printable_bytes(bs: &Vec<u8>) -> String {
             ret.push(c);
         }
     }
-    return String::from_utf8(ret).unwrap();
+    String::from_utf8(ret).unwrap()
 }
 
 fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
     let mut ret = String::new();
     for part in parts {
-        ret += &printable_bytes(&part);
+        ret += &printable_bytes(part);
     }
-    return ret;
+    ret
 }
 
 /// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
@@ -123,7 +122,7 @@ fn check_permutations(parts: &Vec<&Vec<u8>>, target: &Vec<u8>) -> u32 {
 
             if &hash(&guess) == target {
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
-                         printable_bytes(&target), printable_parts(&guess));
+                         printable_bytes(target), printable_parts(&guess));
                 process::exit(0);
             }
 
@@ -155,20 +154,20 @@ fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>)
         ct += check_permutations(&combo, &input.bytes1);
         ct += check_permutations(&combo, &input.bytes2);
         for (salt, target) in salts_and_targets.iter() {
-            println!("    With salt: {}", printable_bytes(&salt));
+            println!("    With salt: {}", printable_bytes(salt));
             let mut salted_combo = combo.clone();
-            salted_combo.push(&salt);
-            ct += check_permutations(&salted_combo, &target);
+            salted_combo.push(salt);
+            ct += check_permutations(&salted_combo, target);
         }
     }
     println!("Checked with transform: {}", ct);
 }
 
 fn check_hmac(input: &Input, key: &Vec<u8>, maybe_mac: &Vec<u8>) {
-    let mac = HMAC::mac(&input.password, &key).to_vec();
+    let mac = HMAC::mac(&input.password, key).to_vec();
     if &mac == maybe_mac {
         println!("FOUND! Matched hash {} with HMAC using key {}",
-                 printable_bytes(&maybe_mac), printable_bytes(&key));
+                 printable_bytes(maybe_mac), printable_bytes(key));
         process::exit(0);
     }
 }
