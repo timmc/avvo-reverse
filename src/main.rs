@@ -68,7 +68,7 @@ fn delims() -> Vec<Vec<u8>> {
     }
 
     // Add in some likely other delims
-    for other in vec!["::", "||"] {
+    for other in vec!["::", "||", "--"] {
         delimiters.push(other.as_bytes().to_owned());
     }
 
@@ -102,7 +102,7 @@ fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
 }
 
 /// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
-const ALLOW_OUTER_DELIMS: bool = false;
+const ALLOW_OUTER_DELIMS: bool = true;
 
 fn check_permutations(parts: &Vec<&Vec<u8>>, target: &Vec<u8>) -> u32 {
     let delimiters = delims();
