@@ -99,7 +99,10 @@ const ALLOW_OUTER_DELIMS: bool = true;
 
 fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
     let delimiters: Vec<Vec<u8>> = delims(); // .into_iter().map(|d| d.as_slice()).collect();
+
     let mut ct = 0;
+    let mut hasher = Sha1::new();
+
     for perm_refs in parts.iter().permutations(parts.len()) {
         let perm: Vec<&[u8]> = perm_refs.into_iter().copied().collect();
         println!("      Permutation: {}", printable_parts(&perm));
@@ -113,12 +116,11 @@ fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
                 (&perm, &delims_choice)
             };
 
-            let mut hasher = Sha1::new();
             for piece in stream1.iter().interleave(stream2.iter()) {
                 hasher.update(piece);
             }
 
-            if hasher.finalize() == *target {
+            if hasher.finalize_reset() == *target {
                 let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter()).copied().collect();
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
                          printable_bytes(target), printable_parts(&guess));
