@@ -76,14 +76,6 @@ fn delims() -> Vec<Vec<u8>> {
     delimiters
 }
 
-fn hash(data: &[&[u8]]) -> GenericArray<u8, U20> {
-    let mut hasher = Sha1::new();
-    for piece in data {
-        hasher.update(piece);
-    }
-    hasher.finalize()
-}
-
 fn printable_bytes(bs: &[u8]) -> String {
     let mut ret = Vec::new();
     for b in bs {
@@ -123,7 +115,12 @@ fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
             let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter())
                 .copied().collect();
 
-            if &hash(&guess) == target {
+            let mut hasher = Sha1::new();
+            for piece in guess.iter() {
+                hasher.update(piece);
+            }
+
+            if hasher.finalize() == *target {
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
                          printable_bytes(target), printable_parts(&guess));
                 process::exit(0);
