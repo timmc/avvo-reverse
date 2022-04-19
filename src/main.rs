@@ -58,10 +58,8 @@ fn load(record_path: &String, password_path: &String) -> Input {
 }
 
 fn delims() -> Vec<Vec<u8>> {
-    let mut delimiters: Vec<Vec<u8>> = Vec::new();
-
     // Start with the empty "delimiter"
-    delimiters.push(Vec::new());
+    let mut delimiters: Vec<Vec<u8>> = vec![Vec::new()];
 
     // Add all non-alpanumeric printable ASCII
     for c in "`-=[]\\;',./~!@#$%^&*()_+{}|:\"<>? ".chars() {
@@ -86,7 +84,7 @@ fn printable_bytes(bs: &[u8]) -> String {
     String::from_utf8(ret).unwrap()
 }
 
-fn printable_parts(parts: &[&[u8]]) -> String {
+fn printable_parts(parts: &Vec<&[u8]>) -> String {
     let mut ret = String::new();
     for part in parts {
         ret += &printable_bytes(part);
@@ -98,30 +96,40 @@ fn printable_parts(parts: &[&[u8]]) -> String {
 const ALLOW_OUTER_DELIMS: bool = true;
 
 fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
-    let delimiters: Vec<Vec<u8>> = delims(); // .into_iter().map(|d| d.as_slice()).collect();
+    let delimiters: Vec<Vec<u8>> = delims();
 
     let mut ct = 0;
     let mut hasher = Sha1::new();
 
-    for perm_refs in parts.iter().permutations(parts.len()) {
-        let perm: Vec<&[u8]> = perm_refs.into_iter().copied().collect();
+    let parts_len = parts.len();
+
+    for perm in parts.iter().permutations(parts_len) {
+        let perm = perm.into_iter().copied().collect();
         println!("      Permutation: {}", printable_parts(&perm));
 
         let delim_count = if ALLOW_OUTER_DELIMS { perm.len() + 1 } else { perm.len() - 1 };
-        for delims_choice_refs in iter::repeat(&delimiters).take(delim_count).multi_cartesian_product() {
-            let delims_choice: Vec<&[u8]> = delims_choice_refs.into_iter().map(|d| d.as_slice()).collect();
-            let (stream1, stream2) = if ALLOW_OUTER_DELIMS {
-                (&delims_choice, &perm)
-            } else {
-                (&perm, &delims_choice)
-            };
+        for delims_choice in iter::repeat(&delimiters).take(delim_count).multi_cartesian_product() {
+            let mut delims_choice_iter = delims_choice.iter();
 
-            for piece in stream1.iter().interleave(stream2.iter()) {
+            for (piece_num, piece) in perm.iter().enumerate() {
+                if ALLOW_OUTER_DELIMS || piece_num > 0 {
+                    hasher.update(delims_choice_iter.next().unwrap());
+                }
                 hasher.update(piece);
+            }
+            if ALLOW_OUTER_DELIMS {
+                hasher.update(delims_choice_iter.next().unwrap());
             }
 
             if hasher.finalize_reset() == *target {
-                let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter()).copied().collect();
+                let guess_perms: Vec<&[u8]> = perm;
+                let guess_delims: Vec<&[u8]> = delims_choice.into_iter().map(|x| x.as_slice()).collect();
+                let (stream1, stream2) = if ALLOW_OUTER_DELIMS {
+                    (guess_delims, guess_perms)
+                } else {
+                    (guess_perms, guess_delims)
+                };
+                let guess: Vec<&[u8]> = stream1.into_iter().interleave(stream2).collect();
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
                          printable_bytes(target), printable_parts(&guess));
                 process::exit(0);
