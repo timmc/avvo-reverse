@@ -12,6 +12,8 @@
 /// $ avvo-reverse ~/tmp/ram/sample-record.txt ~/tmp/ram/sample-password.txt
 /// FOUND! Matched second hash with SHA-1: input=b'|hello:some@email/1199546::3e6139dd5bba6c8617c112abdb026a648e9bf592|'
 
+use generic_array::{GenericArray};
+use generic_array::typenum::U20;
 use hmac_sha1_compact::HMAC;
 use itertools::Itertools;
 use sha1::{Sha1, Digest};
@@ -74,15 +76,15 @@ fn delims() -> Vec<Vec<u8>> {
     delimiters
 }
 
-fn hash(data: &Vec<&Vec<u8>>) -> Vec<u8> {
+fn hash(data: &[&[u8]]) -> GenericArray<u8, U20> {
     let mut hasher = Sha1::new();
     for piece in data {
         hasher.update(piece);
     }
-    hasher.finalize().to_vec()
+    hasher.finalize()
 }
 
-fn printable_bytes(bs: &Vec<u8>) -> String {
+fn printable_bytes(bs: &[u8]) -> String {
     let mut ret = Vec::new();
     for b in bs {
         for c in ascii::escape_default(*b) {
@@ -92,7 +94,7 @@ fn printable_bytes(bs: &Vec<u8>) -> String {
     String::from_utf8(ret).unwrap()
 }
 
-fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
+fn printable_parts(parts: &[&[u8]]) -> String {
     let mut ret = String::new();
     for part in parts {
         ret += &printable_bytes(part);
@@ -103,21 +105,22 @@ fn printable_parts(parts: &Vec<&Vec<u8>>) -> String {
 /// At least three orders of magnitude slower (e.g. 2.5 hours rather than 6 seconds)
 const ALLOW_OUTER_DELIMS: bool = true;
 
-fn check_permutations(parts: &[&Vec<u8>], target: &Vec<u8>) -> u32 {
-    let delimiters = delims();
+fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
+    let delimiters: Vec<Vec<u8>> = delims(); // .into_iter().map(|d| d.as_slice()).collect();
     let mut ct = 0;
     for perm_refs in parts.iter().permutations(parts.len()) {
-        let perm = perm_refs.into_iter().copied().collect();
+        let perm: Vec<&[u8]> = perm_refs.into_iter().copied().collect();
         println!("      Permutation: {}", printable_parts(&perm));
 
         let delim_count = if ALLOW_OUTER_DELIMS { perm.len() + 1 } else { perm.len() - 1 };
-        for delims_choice in iter::repeat(&delimiters).take(delim_count).multi_cartesian_product() {
+        for delims_choice_refs in iter::repeat(&delimiters).take(delim_count).multi_cartesian_product() {
+            let delims_choice: Vec<&[u8]> = delims_choice_refs.into_iter().map(|d| d.as_slice()).collect();
             let (stream1, stream2) = if ALLOW_OUTER_DELIMS {
                 (&delims_choice, &perm)
             } else {
                 (&perm, &delims_choice)
             };
-            let guess: Vec<&Vec<u8>> = stream1.iter().interleave(stream2.iter())
+            let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter())
                 .copied().collect();
 
             if &hash(&guess) == target {
@@ -134,7 +137,7 @@ fn check_permutations(parts: &[&Vec<u8>], target: &Vec<u8>) -> u32 {
 
 fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>) {
     let password_variant = xform(&input.password);
-    let combos: Vec<Vec<&Vec<u8>>> = vec![
+    let combos: Vec<Vec<&[u8]>> = vec![
         vec![&password_variant],
         vec![&password_variant, &input.email],
         vec![&password_variant, &input.seqid],
@@ -151,21 +154,21 @@ fn check_with_password_xform(input: &Input, xform: &dyn Fn(&Vec<u8>) -> Vec<u8>)
     for combo in combos {
         println!("  Combination: {}", printable_parts(&combo));
         println!("    Unsalted");
-        ct += check_permutations(&combo, &input.bytes1);
-        ct += check_permutations(&combo, &input.bytes2);
+        ct += check_permutations(&combo, GenericArray::from_slice(&input.bytes1));
+        ct += check_permutations(&combo, GenericArray::from_slice(&input.bytes2));
         for (salt, target) in salts_and_targets.iter() {
             println!("    With salt: {}", printable_bytes(salt));
             let mut salted_combo = combo.clone();
             salted_combo.push(salt);
-            ct += check_permutations(&salted_combo, target);
+            ct += check_permutations(&salted_combo, GenericArray::from_slice(target));
         }
     }
     println!("Checked with transform: {}", ct);
 }
 
-fn check_hmac(input: &Input, key: &Vec<u8>, maybe_mac: &Vec<u8>) {
+fn check_hmac(input: &Input, key: &[u8], maybe_mac: &[u8]) {
     let mac = HMAC::mac(&input.password, key).to_vec();
-    if &mac == maybe_mac {
+    if mac == maybe_mac {
         println!("FOUND! Matched hash {} with HMAC using key {}",
                  printable_bytes(maybe_mac), printable_bytes(key));
         process::exit(0);
