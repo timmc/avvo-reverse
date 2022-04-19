@@ -112,15 +112,14 @@ fn check_permutations(parts: &[&[u8]], target: &GenericArray<u8, U20>) -> u32 {
             } else {
                 (&perm, &delims_choice)
             };
-            let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter())
-                .copied().collect();
 
             let mut hasher = Sha1::new();
-            for piece in guess.iter() {
+            for piece in stream1.iter().interleave(stream2.iter()) {
                 hasher.update(piece);
             }
 
             if hasher.finalize() == *target {
+                let guess: Vec<&[u8]> = stream1.iter().interleave(stream2.iter()).copied().collect();
                 println!("FOUND! Matched hash {} with SHA-1 of {}",
                          printable_bytes(target), printable_parts(&guess));
                 process::exit(0);
